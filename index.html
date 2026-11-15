@@ -69,7 +69,7 @@ main{padding:var(--below) calc(var(--sar) + 10px) calc(var(--sab) + 16px) calc(v
 }
 .card h2{margin:0;font-size:15px;font-weight:700}
 .mut{color:var(--mut);font-size:13px}
-input[type=text],input[type=password]{
+input[type=text],input[type=password],input[type=tel]{
   width:100%;background:rgba(0,0,0,.25);color:var(--txt);border:1px solid var(--line);
   border-radius:12px;padding:11px 12px;outline:none;
   font-family:ui-monospace,Menlo,monospace;letter-spacing:.5px;
@@ -127,6 +127,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 
   <div class="card">
     <h2>Активировать ключ</h2>
+    <input type="tel" id="pAct" placeholder="Номер телефона: +7 999 123-45-67" autocomplete="off">
     <input type="text" id="kAct" placeholder="UG-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="btn gold" id="bAct">✓ Активировать</button>
     <div class="msg" id="mAct"></div>
@@ -134,7 +135,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 
   <div class="card">
     <h2>Заблокировать ключ</h2>
-    <input type="text" id="kBlk" placeholder="UG-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
+    <input type="text" id="kBlk" placeholder="Ключ или номер телефона" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="btn red" id="bBlk">⛔ Заблокировать</button>
     <div class="msg" id="mBlk"></div>
   </div>
@@ -144,7 +145,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '9';
+const APP_VER = '10';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -178,52 +179,69 @@ async function keyHash(k){
   const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('UGK|'+k.app+'|'+k.body)));
   return Array.from(h, b=>b.toString(16).padStart(2,'0')).join('');
 }
-function tidy(inp){ inp.addEventListener('input', ()=>{ const k=parseKey(inp.value); if(k.key && inp.value!==k.key) inp.value=k.key; }); }
-tidy($('#kAct')); tidy($('#kBlk'));
+/* номер телефона: только цифры, 8XXXXXXXXXX и 10 цифр → 7XXXXXXXXXX */
+function parsePhone(raw){
+  let t = (raw||'').toUpperCase();
+  const km = t.match(/[A-Z]{2}\s*-?\s*[0-9A-Z]{4}\s*-?\s*[0-9A-Z]{4}\s*-?\s*[0-9A-Z]{4}/); if (km) t = t.replace(km[0],' ');
+  const m = t.match(/\+?\d[\d\s\-()]{6,20}\d/); if (!m) return {err:'Введи номер телефона покупателя'};
+  let d = m[0].replace(/\D/g,'');
+  if (d.length===11 && d[0]==='8') d = '7'+d.slice(1);
+  if (d.length===10 && d[0]==='9') d = '7'+d;
+  if (d.length<10 || d.length>15) return {err:'Номер телефона введён не полностью'};
+  return { num:d, show:'+'+d };
+}
+function fill(src){
+  const t = src.value, k = parseKey(t), p = parsePhone(t);
+  if (k.key && p.num){ $('#pAct').value = p.show; $('#kAct').value = k.key; }
+  else if (src.id==='kAct' && k.key && t!==k.key) src.value = k.key;
+}
+['#kAct','#pAct'].forEach(s=>$(s).addEventListener('input', e=>fill(e.target)));
+$('#kBlk').addEventListener('input', ()=>{ const k=parseKey($('#kBlk').value); if(k.key && $('#kBlk').value!==k.key && !parsePhone($('#kBlk').value.replace(k.key,'')).num) $('#kBlk').value=k.key; });
 
 /* ---------- GitHub storage ---------- */
-const api = p => `https://api.github.com/repos/${OWNER}/${REPO}/contents/${p}`;
+const DATA = 'klyuchi-data';
+const api = (p, repo=REPO) => `https://api.github.com/repos/${OWNER}/${repo}/contents/${p}`;
 const b64e = s => btoa(unescape(encodeURIComponent(s)));
 const b64d = s => decodeURIComponent(escape(atob(s.replace(/\n/g,''))));
-async function ghGet(path){
-  const r = await fetch(api(path)+'?t='+Date.now(), { headers:{ Authorization:'Bearer '+cfg.token, Accept:'application/vnd.github+json' }, cache:'no-store' });
-  if (r.status===404) return { data:null, sha:null };
-  if (r.status===401 || r.status===403) throw new Error('auth');
+async function ghGet(path, repo){
+  const r = await fetch(api(path,repo)+'?t='+Date.now(), { headers:{ Authorization:'Bearer '+cfg.token, Accept:'application/vnd.github+json' }, cache:'no-store' });
+  if (r.status===404){ if (repo===DATA){ const c = await fetch(`https://api.github.com/repos/${OWNER}/${DATA}`, { headers:{ Authorization:'Bearer '+cfg.token }, cache:'no-store' }); if (!c.ok) throw new Error('nodata'); } return { data:null, sha:null }; }
+  if (r.status===401 || r.status===403) throw new Error(repo===DATA?'nodata':'auth');
   if (!r.ok) throw new Error('net');
   const j = await r.json();
   return { data: JSON.parse(b64d(j.content)), sha: j.sha };
 }
-async function ghPut(path, data, sha){
-  const r = await fetch(api(path), { method:'PUT', headers:{ Authorization:'Bearer '+cfg.token, Accept:'application/vnd.github+json' },
+async function ghPut(path, data, sha, repo){
+  const r = await fetch(api(path,repo), { method:'PUT', headers:{ Authorization:'Bearer '+cfg.token, Accept:'application/vnd.github+json' },
     body: JSON.stringify({ message:'Обновление списка', content:b64e(JSON.stringify(data)), ...(sha?{sha}:{}) }) });
   if (r.status===409 || r.status===422) throw new Error('conflict');
-  if (r.status===401 || r.status===403) throw new Error('auth');
+  if (r.status===401 || r.status===403 || (r.status===404 && repo===DATA)) throw new Error(repo===DATA?'nodata':'auth');
   if (!r.ok) throw new Error('net');
   return (await r.json()).content.sha;
 }
-/* change one shard + stats; retries on conflict */
-async function update(k, fn){
-  const h = await keyHash(k), shard = `list/${k.app}/${h.slice(0,2)}.json`, id = h.slice(2,18);
-  for (let attempt=0; attempt<3; attempt++){
-    try{
-      const s = await ghGet(shard);
-      const d = s.data || { a:{}, b:[] };
-      if (Array.isArray(d.a)){ const o={}; d.a.forEach(x=>o[x]=Date.now()+YEAR); d.a=o; }
-      d.a = d.a || {}; d.b = d.b || [];
-      const res = fn(d, id);
-      if (res.same) return res;
-      await ghPut(shard, d, s.sha);
-      const st = await ghGet('list/stats.json');
-      const sd = st.data || {};
-      sd[k.app] = sd[k.app] || { a:0, b:0 };
-      sd[k.app].a += res.da||0; sd[k.app].b += res.db||0;
-      await ghPut('list/stats.json', sd, st.sha);
-      return res;
-    }catch(e){ if (e.message!=='conflict' || attempt===2) throw e; await new Promise(r=>setTimeout(r,800)); }
-  }
+async function shard(k){
+  const h = await keyHash(k), path = `list/${k.app}/${h.slice(0,2)}.json`, id = h.slice(2,18);
+  const s = await ghGet(path);
+  const d = s.data || {};
+  if (Array.isArray(d.a)){ const o={}; d.a.forEach(x=>o[x]=Date.now()+YEAR); d.a=o; }
+  d.a = d.a || {}; d.b = d.b || []; d.m = d.m || [];
+  return { path, id, d, sha:s.sha };
 }
+async function saveShard(s){ s.sha = await ghPut(s.path, s.d, s.sha); }
+async function bumpStats(app, da, db){
+  if (!da && !db) return;
+  const st = await ghGet('list/stats.json'); const sd = st.data || {};
+  sd[app] = sd[app] || { a:0, b:0 }; sd[app].a += da||0; sd[app].b += db||0;
+  await ghPut('list/stats.json', sd, st.sha);
+}
+async function buyers(){ const s = await ghGet('buyers.json', DATA); return { d: s.data || {}, sha: s.sha }; }
+async function saveBuyers(b){ b.sha = await ghPut('buyers.json', b.d, b.sha, DATA); }
+function keyOwner(B, key){ for (const n in B.d) if (B.d[n].k===key) return n; return null; }
+
 function errText(e){
   if (e.message==='auth') return 'GitHub не принял пропуск. Проверь его в настройках ⚙︎';
+  if (e.message==='nodata') return 'Нет доступа к закрытому репозиторию klyuchi-data. Создай его и добавь в пропуск';
+  if (e.message==='conflict') return 'Данные изменились во время записи. Нажми ещё раз';
   return 'Нет связи с GitHub. Проверь интернет и попробуй ещё раз';
 }
 
@@ -244,58 +262,99 @@ function ghOk(ok, auth){
 }
 
 function needToken(){ if (cfg.token) return false; openSettings(); return true; }
+function ask(title, text, okText, okCls, fn){
+  popup(`<h3>${title}</h3><div class="mut">${text}</div>
+    <div class="stats"><button class="btn sm" onclick="closePop()">Отмена</button><button class="btn ${okCls} sm" id="bAsk">${okText}</button></div>`);
+  $('#bAsk').onclick = ()=>{ closePop(); fn(); };
+}
 
-async function doActivate(k, force){
-  const b=$('#bAct'); b.disabled=true; msg('#mAct','m-info','Записываю…');
+/* mode: undefined — проверить и спросить; 'extend' — продлить на год; 'move' — перенести на новый ключ */
+async function doActivate(p, k, mode){
+  const btn=$('#bAct'); btn.disabled=true; msg('#mAct','m-info','Записываю…');
   try{
-    const r = await update(k, (d,id)=>{
-      if (d.b.includes(id)) return { same:true, blocked:true };
-      const cur = +d.a[id]||0, now = Date.now();
-      if (cur > now && !force) return { same:true, until:cur };
-      d.a[id] = Math.max(now, cur) + YEAR;
-      return { da: cur ? 0 : 1, until:d.a[id], renew: !!cur };
-    });
-    if (r.blocked) msg('#mAct','m-bad','⛔ Этот ключ заблокирован');
-    else if (r.same){
-      msg('#mAct','m-warn',`Ключ уже активен до ${fmtD(r.until)}`);
-      popup(`<h3>Ключ уже активен</h3><div class="mut">${k.key} действует до ${fmtD(r.until)}. Продлить ещё на год, до ${fmtD(r.until+YEAR)}?</div>
-        <div class="stats"><button class="btn sm" onclick="closePop()">Отмена</button><button class="btn gold sm" id="bExt">Продлить</button></div>`);
-      $('#bExt').onclick = ()=>{ closePop(); doActivate(k, true); };
+    const B = await buyers(), now = Date.now();
+    const rec = B.d[p.num];
+    const S = await shard(k);
+    if (S.d.b.includes(S.id)) { msg('#mAct','m-bad','⛔ Этот ключ заблокирован'); return; }
+    const owner = keyOwner(B, k.key);
+    if (owner && owner!==p.num){ msg('#mAct','m-bad',`✗ Этот ключ уже привязан к номеру +${owner}`); return; }
+
+    if (!rec){                                         /* новая покупка */
+      const u = now + YEAR;
+      S.d.a[S.id] = u; S.d.m = S.d.m.filter(x=>x!==S.id); await saveShard(S);
+      B.d[p.num] = { k:k.key, u, t:now }; await saveBuyers(B);
+      await bumpStats(k.app, 1, 0);
+      done(`✓ ${p.show} — ${k.key} активирован до ${fmtD(u)}`);
     }
-    else { msg('#mAct','m-ok',`✓ ${k.key} ${r.renew?'продлён':'активирован'} до ${fmtD(r.until)}. У покупателя приложение откроется примерно через 30 секунд`); $('#kAct').value=''; }
-    loadStats();
+    else if (rec.k===k.key){                           /* тот же телефон */
+      if (rec.u > now && mode!=='extend'){
+        msg('#mAct','m-warn',`Подписка ${p.show} уже активна до ${fmtD(rec.u)}`);
+        ask('Подписка уже активна', `${p.show} действует до ${fmtD(rec.u)}. Продлить ещё на год, до ${fmtD(rec.u+YEAR)}?`, 'Продлить', 'gold', ()=>doActivate(p,k,'extend'));
+        return;
+      }
+      const u = Math.max(now, rec.u) + YEAR;
+      S.d.a[S.id] = u; await saveShard(S);
+      rec.u = u; await saveBuyers(B);
+      done(`✓ ${p.show} — продлено до ${fmtD(u)}`);
+    }
+    else {                                             /* новый телефон: перенос */
+      const live = rec.u > now;
+      if (mode!=='move'){
+        msg('#mAct','m-warn',`Номер ${p.show} уже привязан к ключу ${rec.k}`);
+        ask('Восстановить покупку?', live
+          ? `${p.show} сейчас привязан к ключу ${rec.k}, подписка до ${fmtD(rec.u)}. Перенести её на новый ключ ${k.key}? Старый телефон отключится.`
+          : `Подписка ${p.show} закончилась ${fmtD(rec.u)}. Перенести на новый ключ ${k.key} и продлить на год?`,
+          live ? 'Перенести' : 'Перенести и продлить', 'gold', ()=>doActivate(p,k,'move'));
+        return;
+      }
+      const u = live ? rec.u : now + YEAR;
+      const old = parseKey(rec.k);
+      if (old.key){
+        const O = await shard(old);
+        if (O.path===S.path){ delete S.d.a[O.id]; if(!S.d.m.includes(O.id)) S.d.m.push(O.id); }
+        else { delete O.d.a[O.id]; if(!O.d.m.includes(O.id)) O.d.m.push(O.id); await saveShard(O); }
+      }
+      S.d.a[S.id] = u; S.d.m = S.d.m.filter(x=>x!==S.id); await saveShard(S);
+      (rec.old = rec.old || []).push(rec.k); rec.k = k.key; rec.u = u; await saveBuyers(B);
+      done(`✓ ${p.show} — покупка перенесена на ${k.key}, до ${fmtD(u)}. Старый ключ отключён`);
+    }
   }catch(e){ msg('#mAct','m-bad','✗ '+errText(e)); }
-  b.disabled=false;
+  finally{ btn.disabled=false; }
+  function done(t){ msg('#mAct','m-ok', t+'. У покупателя приложение откроется примерно через 30 секунд'); $('#kAct').value=''; $('#pAct').value=''; loadStats(); }
 }
 $('#bAct').onclick = ()=>{
+  const p = parsePhone($('#pAct').value);
+  if (p.err) return msg('#mAct','m-bad','✗ '+p.err);
   const k = parseKey($('#kAct').value);
   if (k.err) return msg('#mAct','m-bad','✗ '+k.err);
   if (needToken()) return;
-  doActivate(k, false);
+  doActivate(p, k);
 };
 
-$('#bBlk').onclick = ()=>{
-  const k = parseKey($('#kBlk').value);
-  if (k.err) return msg('#mBlk','m-bad','✗ '+k.err);
+$('#bBlk').onclick = async ()=>{
+  const raw = $('#kBlk').value;
+  let k = parseKey(raw);
   if (needToken()) return;
-  popup(`<h3>Заблокировать ${k.key}?</h3><div class="mut">Приложение на этом телефоне закроется при следующей проверке, когда будет интернет.</div>
-    <div class="stats"><button class="btn sm" onclick="closePop()">Отмена</button><button class="btn red sm" id="bBlkOk">Заблокировать</button></div>`);
-  $('#bBlkOk').onclick = async ()=>{
-    closePop();
+  let num = null;
+  if (k.err){
+    const p = parsePhone(raw);
+    if (p.err) return msg('#mBlk','m-bad','✗ Введи ключ или номер телефона');
+    try{ const B = await buyers(); if (!B.d[p.num]) return msg('#mBlk','m-bad','✗ Покупатель с таким номером не найден'); k = parseKey(B.d[p.num].k); num = p.num; }
+    catch(e){ return msg('#mBlk','m-bad','✗ '+errText(e)); }
+  }
+  ask(`Заблокировать ${k.key}?`, (num?`Номер +${num}. `:'')+'Приложение на этом телефоне закроется при следующей проверке, когда будет интернет.', 'Заблокировать', 'red', async ()=>{
     const b=$('#bBlk'); b.disabled=true; msg('#mBlk','m-info','Записываю…');
     try{
-      const r = await update(k, (d,id)=>{
-        if (d.b.includes(id)) return { same:true };
-        const wasAct = !!d.a[id];
-        if (wasAct) delete d.a[id];
-        d.b.push(id); return { db:1, da: wasAct?-1:0 };
-      });
-      if (r.same) msg('#mBlk','m-warn','Этот ключ уже заблокирован');
-      else { msg('#mBlk','m-ok',`⛔ ${k.key} заблокирован`); $('#kBlk').value=''; }
-      loadStats();
+      const S = await shard(k);
+      if (S.d.b.includes(S.id)) { msg('#mBlk','m-warn','Этот ключ уже заблокирован'); return; }
+      const wasAct = !!S.d.a[S.id];
+      delete S.d.a[S.id]; S.d.b.push(S.id); await saveShard(S);
+      try{ const B = await buyers(); const n = num || keyOwner(B, k.key); if (n){ B.d[n].blk = Date.now(); await saveBuyers(B); } }catch(e){}
+      await bumpStats(k.app, wasAct?-1:0, 1);
+      msg('#mBlk','m-ok',`⛔ ${k.key} заблокирован`); $('#kBlk').value=''; loadStats();
     }catch(e){ msg('#mBlk','m-bad','✗ '+errText(e)); }
-    b.disabled=false;
-  };
+    finally{ b.disabled=false; }
+  });
 };
 
 /* ---------- settings: GitHub token ---------- */
@@ -305,7 +364,7 @@ function openSettings(){
     <ol>
       <li>Открой <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">создание пропуска на GitHub</a></li>
       <li>Token name: <b>Klyuchi</b>, Expiration: <b>No expiration</b></li>
-      <li>Repository access: <b>Only select repositories</b> → <b>klyuchi</b></li>
+      <li>Repository access: <b>Only select repositories</b> → <b>klyuchi</b> и <b>klyuchi-data</b></li>
       <li>Permissions → Contents: <b>Read and write</b></li>
       <li>Generate token → скопируй и вставь сюда</li>
     </ol>
