@@ -19,11 +19,12 @@
   --gold:#ffcf73;
   --sat:max(env(safe-area-inset-top), 26px); --sab:env(safe-area-inset-bottom);
   --sal:0px; --sar:0px;
-  --pill:10px;
+  --pill:86px; /* справа в шапке место под «островок» со временем и зарядом (iPhone Duo) */
+  --below:10px; /* отступ разделов от шапки */
 }
-/* iPhone Duo: время и заряд стоят «островком» справа сверху — шапка начинается ниже него */
-@media (max-width:600px) and (orientation:portrait){ :root{ --sat:max(env(safe-area-inset-top), 146px); } }
-@media (min-width:601px) and (min-height:501px){ :root{ --sat:max(env(safe-area-inset-top), 80px); } }
+/* iPhone Duo: разделы начинаются ниже «островка» со временем и зарядом */
+@media (max-width:600px) and (orientation:portrait){ :root{ --below:84px; } }
+@media (min-width:601px) and (min-height:501px){ :root{ --below:30px; } }
 /* боковые отступы под вырез камеры — только внешний экран в горизонтальном положении */
 @media (orientation:landscape) and (max-height:500px){ :root{ --sal:env(safe-area-inset-left); --sar:env(safe-area-inset-right); } }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -56,7 +57,7 @@ body::before{content:"";position:fixed;inset:-2px;z-index:-1;pointer-events:none
 #ptr{position:fixed;left:50%;top:calc(var(--sat) + 52px);transform:translate(-50%,-60px);z-index:15;
   width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   background:var(--glass2);border:1px solid var(--line);font-size:17px;color:var(--gold);opacity:0}
-main{padding:10px calc(var(--sar) + 10px) calc(var(--sab) + 16px) calc(var(--sal) + 10px);
+main{padding:var(--below) calc(var(--sar) + 10px) calc(var(--sab) + 16px) calc(var(--sal) + 10px);
   display:grid;gap:10px;grid-template-columns:1fr}
 @media (min-width:700px){ main{grid-template-columns:1fr 1fr;align-items:start} .span2{grid-column:1/-1} }
 .card{
@@ -143,7 +144,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '7';
+const APP_VER = '8';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
