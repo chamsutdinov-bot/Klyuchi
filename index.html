@@ -145,7 +145,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '12';
+const APP_VER = '13';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -200,6 +200,7 @@ $('#kBlk').addEventListener('input', ()=>{ const k=parseKey($('#kBlk').value); i
 
 /* ---------- GitHub storage ---------- */
 const DATA = 'klyuchi-data';
+let lastGh = '';
 const api = (p, repo=REPO) => `https://api.github.com/repos/${OWNER}/${repo}/contents/${p}`;
 const b64e = s => btoa(unescape(encodeURIComponent(s)));
 const b64d = s => decodeURIComponent(escape(atob(s.replace(/\n/g,''))));
@@ -216,7 +217,7 @@ async function ghPut(path, data, sha, repo){
     body: JSON.stringify({ message:'Обновление списка', content:b64e(JSON.stringify(data)), ...(sha?{sha}:{}) }) });
   if (r.status===409 || r.status===422) throw new Error('conflict');
   if (r.status===401) throw new Error('auth');
-  if (r.status===403 || r.status===404) throw new Error(repo===DATA?'nodata':'nowrite');
+  if (r.status===403 || r.status===404){ let t=''; try{ t=(await r.json()).message||''; }catch(e){} lastGh = r.status+' '+t; throw new Error(repo===DATA?'nodata':'nowrite'); }
   if (!r.ok) throw new Error('net');
   return (await r.json()).content.sha;
 }
@@ -241,7 +242,7 @@ function keyOwner(B, key){ for (const n in B.d) if (B.d[n].k===key) return n; re
 
 function errText(e){
   if (e.message==='auth') return 'GitHub не принял пропуск. Проверь его в настройках ⚙︎';
-  if (e.message==='nowrite') return 'Пропуск не может записывать в репозиторий Klyuchi. В настройках пропуска на GitHub отметь Klyuchi и поставь Contents: Read and write';
+  if (e.message==='nowrite') return 'Пропуск не может записывать в репозиторий Klyuchi. В настройках пропуска на GitHub отметь Klyuchi и поставь Contents: Read and write' + (lastGh?` <span style="opacity:.7;font-weight:400">(GitHub: ${lastGh})</span>`:'');
   if (e.message==='nodata') return 'Нет доступа к закрытому репозиторию klyuchi-data. Создай его и добавь в пропуск';
   if (e.message==='conflict') return 'Данные изменились во время записи. Нажми ещё раз';
   return 'Нет связи с GitHub. Проверь интернет и попробуй ещё раз';
