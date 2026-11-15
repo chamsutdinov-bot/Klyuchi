@@ -145,12 +145,12 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '10';
+const APP_VER = '11';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 const APPS = { UG: 'Universal Gym' };
-const YEAR = 365*24*60*60*1000;
+const YEAR = 183*24*60*60*1000; /* срок подписки: полгода */
 const fmtD = t => new Date(t).toLocaleDateString('ru-RU');
 const $ = s => document.querySelector(s);
 let cfg = {};
@@ -268,7 +268,7 @@ function ask(title, text, okText, okCls, fn){
   $('#bAsk').onclick = ()=>{ closePop(); fn(); };
 }
 
-/* mode: undefined — проверить и спросить; 'extend' — продлить на год; 'move' — перенести на новый ключ */
+/* mode: undefined — проверить и спросить; 'extend' — продлить на полгода; 'move' — перенести на новый ключ */
 async function doActivate(p, k, mode){
   const btn=$('#bAct'); btn.disabled=true; msg('#mAct','m-info','Записываю…');
   try{
@@ -289,7 +289,7 @@ async function doActivate(p, k, mode){
     else if (rec.k===k.key){                           /* тот же телефон */
       if (rec.u > now && mode!=='extend'){
         msg('#mAct','m-warn',`Подписка ${p.show} уже активна до ${fmtD(rec.u)}`);
-        ask('Подписка уже активна', `${p.show} действует до ${fmtD(rec.u)}. Продлить ещё на год, до ${fmtD(rec.u+YEAR)}?`, 'Продлить', 'gold', ()=>doActivate(p,k,'extend'));
+        ask('Подписка уже активна', `${p.show} действует до ${fmtD(rec.u)}. Продлить ещё на полгода, до ${fmtD(rec.u+YEAR)}?`, 'Продлить', 'gold', ()=>doActivate(p,k,'extend'));
         return;
       }
       const u = Math.max(now, rec.u) + YEAR;
@@ -303,7 +303,7 @@ async function doActivate(p, k, mode){
         msg('#mAct','m-warn',`Номер ${p.show} уже привязан к ключу ${rec.k}`);
         ask('Восстановить покупку?', live
           ? `${p.show} сейчас привязан к ключу ${rec.k}, подписка до ${fmtD(rec.u)}. Перенести её на новый ключ ${k.key}? Старый телефон отключится.`
-          : `Подписка ${p.show} закончилась ${fmtD(rec.u)}. Перенести на новый ключ ${k.key} и продлить на год?`,
+          : `Подписка ${p.show} закончилась ${fmtD(rec.u)}. Перенести на новый ключ ${k.key} и продлить на полгода?`,
           live ? 'Перенести' : 'Перенести и продлить', 'gold', ()=>doActivate(p,k,'move'));
         return;
       }
