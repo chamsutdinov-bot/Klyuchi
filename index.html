@@ -146,7 +146,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '15';
+const APP_VER = '16';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -199,6 +199,7 @@ function parsePhone(raw){
 function fill(src){
   const t = src.value, k = parseKey(t), p = parsePhone(t);
   if (k.key && p.num){ $('#pAct').value = p.show; $('#kAct').value = k.key; }
+  const pm = t.match(/📅\s*(12|6)\b/); if (pm) setTerm(pm[1]==='12' ? 'y' : 'h');
   else if (src.id==='kAct' && k.key && t!==k.key) src.value = k.key;
 }
 ['#kAct','#pAct'].forEach(s=>$(s).addEventListener('input', e=>fill(e.target)));
@@ -331,7 +332,8 @@ async function doActivate(p, k, mode){
   finally{ btn.disabled=false; }
   function done(t){ msg('#mAct','m-ok', t+'. У покупателя приложение откроется примерно через 30 секунд'); $('#kAct').value=''; $('#pAct').value=''; loadStats(); }
 }
-$('#term').onclick = e=>{ const b = e.target.closest('button'); if (!b) return; term = b.dataset.t; document.querySelectorAll('#term button').forEach(x=>x.classList.toggle('gold', x===b)); };
+function setTerm(t){ term = t; document.querySelectorAll('#term button').forEach(x=>x.classList.toggle('gold', x.dataset.t===t)); }
+$('#term').onclick = e=>{ const b = e.target.closest('button'); if (!b) return; setTerm(b.dataset.t); };
 $('#bAct').onclick = ()=>{
   const p = parsePhone($('#pAct').value);
   if (p.err) return msg('#mAct','m-bad','✗ '+p.err);
