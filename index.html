@@ -129,6 +129,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
     <h2>Активировать ключ</h2>
     <input type="tel" id="pAct" placeholder="Номер телефона: +7 999 123-45-67" autocomplete="off">
     <input type="text" id="kAct" placeholder="UG-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="stats" id="term"><button class="btn sm gold" data-t="h">Полгода</button><button class="btn sm" data-t="y">Год</button></div>
     <button class="btn gold" id="bAct">✓ Активировать</button>
     <div class="msg" id="mAct"></div>
   </div>
@@ -145,12 +146,17 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '13';
+const APP_VER = '14';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-const APPS = { UG: 'Universal Gym' };
+const APPS = { UG: 'Universal Gym', KM: 'Конструктор' };
 const YEAR = 183*24*60*60*1000; /* срок подписки: полгода */
+const TERMS = { h:{ ms:YEAR, t:'полгода' }, y:{ ms:365*24*60*60*1000, t:'год' } };
+let term = 'h'; /* выбранный срок при активации */
+/* покупатели хранятся по номеру; у Universal Gym — просто номер, у других приложений — «KM:номер» */
+const bk = (num, app) => app==='UG' ? num : app+':'+num;
+const showNum = n => '+'+String(n).replace(/^[A-Z]+:/,'');
 const fmtD = t => new Date(t).toLocaleDateString('ru-RU');
 const $ = s => document.querySelector(s);
 let cfg = {};
@@ -275,27 +281,27 @@ function ask(title, text, okText, okCls, fn){
 async function doActivate(p, k, mode){
   const btn=$('#bAct'); btn.disabled=true; msg('#mAct','m-info','Записываю…');
   try{
-    const B = await buyers(), now = Date.now();
-    const rec = B.d[p.num];
+    const B = await buyers(), now = Date.now(), key = bk(p.num, k.app), T = TERMS[term];
+    const rec = B.d[key];
     const S = await shard(k);
     if (S.d.b.includes(S.id)) { msg('#mAct','m-bad','⛔ Этот ключ заблокирован'); return; }
     const owner = keyOwner(B, k.key);
-    if (owner && owner!==p.num){ msg('#mAct','m-bad',`✗ Этот ключ уже привязан к номеру +${owner}`); return; }
+    if (owner && owner!==key){ msg('#mAct','m-bad',`✗ Этот ключ уже привязан к номеру ${showNum(owner)}`); return; }
 
     if (!rec){                                         /* новая покупка */
-      const u = now + YEAR;
+      const u = now + T.ms;
       S.d.a[S.id] = u; S.d.m = S.d.m.filter(x=>x!==S.id); await saveShard(S);
-      B.d[p.num] = { k:k.key, u, t:now }; await saveBuyers(B);
+      B.d[key] = { k:k.key, u, t:now }; await saveBuyers(B);
       await bumpStats(k.app, 1, 0);
       done(`✓ ${p.show} — ${k.key} активирован до ${fmtD(u)}`);
     }
     else if (rec.k===k.key){                           /* тот же телефон */
       if (rec.u > now && mode!=='extend'){
         msg('#mAct','m-warn',`Подписка ${p.show} уже активна до ${fmtD(rec.u)}`);
-        ask('Подписка уже активна', `${p.show} действует до ${fmtD(rec.u)}. Продлить ещё на полгода, до ${fmtD(rec.u+YEAR)}?`, 'Продлить', 'gold', ()=>doActivate(p,k,'extend'));
+        ask('Подписка уже активна', `${p.show} действует до ${fmtD(rec.u)}. Продлить ещё на ${T.t}, до ${fmtD(rec.u+T.ms)}?`, 'Продлить', 'gold', ()=>doActivate(p,k,'extend'));
         return;
       }
-      const u = Math.max(now, rec.u) + YEAR;
+      const u = Math.max(now, rec.u) + T.ms;
       S.d.a[S.id] = u; await saveShard(S);
       rec.u = u; await saveBuyers(B);
       done(`✓ ${p.show} — продлено до ${fmtD(u)}`);
@@ -306,11 +312,11 @@ async function doActivate(p, k, mode){
         msg('#mAct','m-warn',`Номер ${p.show} уже привязан к ключу ${rec.k}`);
         ask('Восстановить покупку?', live
           ? `${p.show} сейчас привязан к ключу ${rec.k}, подписка до ${fmtD(rec.u)}. Перенести её на новый ключ ${k.key}? Старый телефон отключится.`
-          : `Подписка ${p.show} закончилась ${fmtD(rec.u)}. Перенести на новый ключ ${k.key} и продлить на полгода?`,
+          : `Подписка ${p.show} закончилась ${fmtD(rec.u)}. Перенести на новый ключ ${k.key} и продлить на ${T.t}?`,
           live ? 'Перенести' : 'Перенести и продлить', 'gold', ()=>doActivate(p,k,'move'));
         return;
       }
-      const u = live ? rec.u : now + YEAR;
+      const u = live ? rec.u : now + T.ms;
       const old = parseKey(rec.k);
       if (old.key){
         const O = await shard(old);
@@ -325,6 +331,7 @@ async function doActivate(p, k, mode){
   finally{ btn.disabled=false; }
   function done(t){ msg('#mAct','m-ok', t+'. У покупателя приложение откроется примерно через 30 секунд'); $('#kAct').value=''; $('#pAct').value=''; loadStats(); }
 }
+$('#term').onclick = e=>{ const b = e.target.closest('button'); if (!b) return; term = b.dataset.t; document.querySelectorAll('#term button').forEach(x=>x.classList.toggle('gold', x===b)); };
 $('#bAct').onclick = ()=>{
   const p = parsePhone($('#pAct').value);
   if (p.err) return msg('#mAct','m-bad','✗ '+p.err);
@@ -342,10 +349,15 @@ $('#bBlk').onclick = async ()=>{
   if (k.err){
     const p = parsePhone(raw);
     if (p.err) return msg('#mBlk','m-bad','✗ Введи ключ или номер телефона');
-    try{ const B = await buyers(); if (!B.d[p.num]) return msg('#mBlk','m-bad','✗ Покупатель с таким номером не найден'); k = parseKey(B.d[p.num].k); num = p.num; }
+    try{
+      const B = await buyers(), keys = Object.keys(B.d).filter(n => n===p.num || n.endsWith(':'+p.num));
+      if (!keys.length) return msg('#mBlk','m-bad','✗ Покупатель с таким номером не найден');
+      if (keys.length>1) return msg('#mBlk','m-bad','✗ У этого номера несколько приложений — введи ключ');
+      k = parseKey(B.d[keys[0]].k); num = keys[0];
+    }
     catch(e){ return msg('#mBlk','m-bad','✗ '+errText(e)); }
   }
-  ask(`Заблокировать ${k.key}?`, (num?`Номер +${num}. `:'')+'Приложение на этом телефоне закроется при следующей проверке, когда будет интернет.', 'Заблокировать', 'red', async ()=>{
+  ask(`Заблокировать ${k.key}?`, (num?`Номер ${showNum(num)}. `:'')+'Приложение на этом телефоне закроется при следующей проверке, когда будет интернет.', 'Заблокировать', 'red', async ()=>{
     const b=$('#bBlk'); b.disabled=true; msg('#mBlk','m-info','Записываю…');
     try{
       const S = await shard(k);
