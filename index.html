@@ -144,11 +144,13 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '8';
+const APP_VER = '9';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 const APPS = { UG: 'Universal Gym' };
+const YEAR = 365*24*60*60*1000;
+const fmtD = t => new Date(t).toLocaleDateString('ru-RU');
 const $ = s => document.querySelector(s);
 let cfg = {};
 try{ cfg = JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ cfg = {}; }
@@ -205,7 +207,9 @@ async function update(k, fn){
   for (let attempt=0; attempt<3; attempt++){
     try{
       const s = await ghGet(shard);
-      const d = s.data || { a:[], b:[] };
+      const d = s.data || { a:{}, b:[] };
+      if (Array.isArray(d.a)){ const o={}; d.a.forEach(x=>o[x]=Date.now()+YEAR); d.a=o; }
+      d.a = d.a || {}; d.b = d.b || [];
       const res = fn(d, id);
       if (res.same) return res;
       await ghPut(shard, d, s.sha);
@@ -241,23 +245,33 @@ function ghOk(ok, auth){
 
 function needToken(){ if (cfg.token) return false; openSettings(); return true; }
 
-$('#bAct').onclick = async ()=>{
-  const k = parseKey($('#kAct').value);
-  if (k.err) return msg('#mAct','m-bad','✗ '+k.err);
-  if (needToken()) return;
+async function doActivate(k, force){
   const b=$('#bAct'); b.disabled=true; msg('#mAct','m-info','Записываю…');
   try{
     const r = await update(k, (d,id)=>{
       if (d.b.includes(id)) return { same:true, blocked:true };
-      if (d.a.includes(id)) return { same:true };
-      d.a.push(id); return { da:1 };
+      const cur = +d.a[id]||0, now = Date.now();
+      if (cur > now && !force) return { same:true, until:cur };
+      d.a[id] = Math.max(now, cur) + YEAR;
+      return { da: cur ? 0 : 1, until:d.a[id], renew: !!cur };
     });
     if (r.blocked) msg('#mAct','m-bad','⛔ Этот ключ заблокирован');
-    else if (r.same) msg('#mAct','m-warn','Этот ключ уже активирован');
-    else { msg('#mAct','m-ok',`✓ ${k.key} активирован. У покупателя приложение откроется примерно через 1–2 минуты`); $('#kAct').value=''; }
+    else if (r.same){
+      msg('#mAct','m-warn',`Ключ уже активен до ${fmtD(r.until)}`);
+      popup(`<h3>Ключ уже активен</h3><div class="mut">${k.key} действует до ${fmtD(r.until)}. Продлить ещё на год, до ${fmtD(r.until+YEAR)}?</div>
+        <div class="stats"><button class="btn sm" onclick="closePop()">Отмена</button><button class="btn gold sm" id="bExt">Продлить</button></div>`);
+      $('#bExt').onclick = ()=>{ closePop(); doActivate(k, true); };
+    }
+    else { msg('#mAct','m-ok',`✓ ${k.key} ${r.renew?'продлён':'активирован'} до ${fmtD(r.until)}. У покупателя приложение откроется примерно через 30 секунд`); $('#kAct').value=''; }
     loadStats();
   }catch(e){ msg('#mAct','m-bad','✗ '+errText(e)); }
   b.disabled=false;
+}
+$('#bAct').onclick = ()=>{
+  const k = parseKey($('#kAct').value);
+  if (k.err) return msg('#mAct','m-bad','✗ '+k.err);
+  if (needToken()) return;
+  doActivate(k, false);
 };
 
 $('#bBlk').onclick = ()=>{
@@ -272,8 +286,8 @@ $('#bBlk').onclick = ()=>{
     try{
       const r = await update(k, (d,id)=>{
         if (d.b.includes(id)) return { same:true };
-        const wasAct = d.a.includes(id);
-        if (wasAct) d.a = d.a.filter(x=>x!==id);
+        const wasAct = !!d.a[id];
+        if (wasAct) delete d.a[id];
         d.b.push(id); return { db:1, da: wasAct?-1:0 };
       });
       if (r.same) msg('#mBlk','m-warn','Этот ключ уже заблокирован');
