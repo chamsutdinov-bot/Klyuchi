@@ -18,12 +18,14 @@
   --line:rgba(255,255,255,.16); --txt:#f2f3f8; --mut:#a7abc3;
   --gold:#ffcf73;
   --sat:env(safe-area-inset-top); --sab:env(safe-area-inset-bottom);
-  --sal:env(safe-area-inset-left); --sar:env(safe-area-inset-right);
+  --sal:0px; --sar:0px;
 }
+@media (orientation:landscape){ :root{ --sal:env(safe-area-inset-left); --sar:env(safe-area-inset-right); } }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 input,textarea,select{font-size:16px!important}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:#0a0c18}
-html,body{margin:0;width:100%;min-height:100%;overflow-x:hidden}
+html,body{margin:0;padding:0;width:100%;max-width:none;min-height:100%;overflow-x:hidden}
+.top,main{width:100%}
 body{
   font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
   color:var(--txt);min-height:100vh;min-height:100dvh;background:transparent;
@@ -136,7 +138,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '3';
+const APP_VER = '4';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
