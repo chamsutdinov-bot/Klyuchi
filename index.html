@@ -146,7 +146,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '17';
+const APP_VER = '18';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -387,7 +387,37 @@ function openSettings(){
     </ol>
     <input type="password" id="tok" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" spellcheck="false" value="${cfg.token?cfg.token.replace(/"/g,''):''}">
     <button class="btn gold sm" id="bTok">Сохранить</button>
-    <div class="msg" id="mTok"></div>`);
+    <div class="msg" id="mTok"></div>
+    <h3 style="margin-top:6px">Заявки в Telegram</h3>
+    <div class="mut">${cfg.tg?`Подключён бот <b>@${cfg.tg}</b>. Номер, ключ, срок и чек от покупателя приходят тебе от него.`:'Покупатель нажмёт «Отправить» в приложении, и номер, ключ, срок и чек об оплате придут тебе от твоего бота.'}</div>
+    <ol>
+      <li>Открой <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> → <b>/newbot</b> → придумай имя и username (в конце <b>bot</b>)</li>
+      <li>Скопируй токен, который пришлёт BotFather, и вставь сюда</li>
+      <li>Открой своего бота и нажми <b>Старт</b> (или напиши ему что угодно)</li>
+      <li>Нажми «Подключить бота»</li>
+    </ol>
+    <input type="password" id="tgTok" placeholder="123456789:AA…" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button class="btn gold sm" id="bTg">Подключить бота</button>
+    <div class="msg" id="mTg"></div>`);
+  $('#bTg').onclick = async ()=>{
+    const t = $('#tgTok').value.trim().replace(/^bot/,'');
+    if (!/^\d+:[\w-]{20,}$/.test(t)) return msg('#mTg','m-bad','Вставь токен от BotFather');
+    if (needToken()) return;
+    msg('#mTg','m-info','Проверяю…');
+    const tg = m => fetch(`https://api.telegram.org/bot${t}/${m}`, {cache:'no-store'}).then(r=>r.json());
+    try{
+      const me = await tg('getMe');
+      if (!me.ok) return msg('#mTg','m-bad','Telegram не принял токен. Скопируй его из BotFather ещё раз');
+      const up = await tg('getUpdates');
+      const ch = (up.result||[]).map(u=>(u.message||u.my_chat_member||{}).chat).filter(c=>c&&c.type==='private').pop();
+      if (!ch) return msg('#mTg','m-bad',`Открой <a href="https://t.me/${me.result.username}" target="_blank" rel="noopener">@${me.result.username}</a>, нажми «Старт» и снова «Подключить бота»`);
+      const cur = await ghGet('list/tg.json');
+      await ghPut('list/tg.json', { t, c: ch.id }, cur.sha);
+      await fetch(`https://api.telegram.org/bot${t}/sendMessage`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ chat_id: ch.id, text:'✅ Бот подключён к админке «Ключи». Сюда будут приходить заявки покупателей.' }) });
+      cfg.tg = me.result.username; saveCfg();
+      msg('#mTg','m-ok',`✓ Подключено: заявки будут приходить от @${me.result.username}`);
+    }catch(e){ msg('#mTg','m-bad', ['auth','nowrite','nodata','conflict','net'].includes(e.message) ? '✗ '+errText(e) : 'Нет связи. Проверь интернет и нажми ещё раз'); }
+  };
   $('#bTok').onclick = async ()=>{
     const t = $('#tok').value.trim();
     if (!t) return msg('#mTok','m-bad','Вставь пропуск');
