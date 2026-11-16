@@ -146,7 +146,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '18';
+const APP_VER = '19';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -236,6 +236,15 @@ async function shard(k){
   d.a = d.a || {}; d.b = d.b || []; d.m = d.m || [];
   return { path, id, d, sha:s.sha };
 }
+/* номер телефона → срок: по номеру приложение открывается на любом телефоне и в любой копии (Safari или иконка) */
+async function setPhone(app, num, u){
+  num = String(num).replace(/^[A-Z]+:/,'');
+  const h = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('UGP|'+app+'|'+num))), b=>b.toString(16).padStart(2,'0')).join('');
+  const path = `list/${app}/p/${h.slice(0,2)}.json`, id = h.slice(2,18);
+  const s = await ghGet(path); const d = s.data || {};
+  if (u) d[id] = u; else delete d[id];
+  await ghPut(path, d, s.sha);
+}
 async function saveShard(s){ s.sha = await ghPut(s.path, s.d, s.sha); }
 async function bumpStats(app, da, db){
   if (!da && !db) return;
@@ -292,19 +301,20 @@ async function doActivate(p, k, mode){
     if (!rec){                                         /* новая покупка */
       const u = now + T.ms;
       S.d.a[S.id] = u; S.d.m = S.d.m.filter(x=>x!==S.id); await saveShard(S);
-      B.d[key] = { k:k.key, u, t:now }; await saveBuyers(B);
+      B.d[key] = { k:k.key, u, t:now }; await saveBuyers(B); await setPhone(k.app, p.num, u);
       await bumpStats(k.app, 1, 0);
       done(`✓ ${p.show} — ${k.key} активирован до ${fmtD(u)}`);
     }
     else if (rec.k===k.key){                           /* тот же телефон */
       if (rec.u > now && mode!=='extend'){
+        try{ await setPhone(k.app, p.num, rec.u); }catch(e){}
         msg('#mAct','m-warn',`Подписка ${p.show} уже активна до ${fmtD(rec.u)}`);
         ask('Подписка уже активна', `${p.show} действует до ${fmtD(rec.u)}. Продлить ещё на ${T.t}, до ${fmtD(rec.u+T.ms)}?`, 'Продлить', 'gold', ()=>doActivate(p,k,'extend'));
         return;
       }
       const u = Math.max(now, rec.u) + T.ms;
       S.d.a[S.id] = u; await saveShard(S);
-      rec.u = u; await saveBuyers(B);
+      rec.u = u; await saveBuyers(B); await setPhone(k.app, p.num, u);
       done(`✓ ${p.show} — продлено до ${fmtD(u)}`);
     }
     else {                                             /* новый телефон: перенос */
@@ -325,7 +335,7 @@ async function doActivate(p, k, mode){
         else { delete O.d.a[O.id]; if(!O.d.m.includes(O.id)) O.d.m.push(O.id); await saveShard(O); }
       }
       S.d.a[S.id] = u; S.d.m = S.d.m.filter(x=>x!==S.id); await saveShard(S);
-      (rec.old = rec.old || []).push(rec.k); rec.k = k.key; rec.u = u; await saveBuyers(B);
+      (rec.old = rec.old || []).push(rec.k); rec.k = k.key; rec.u = u; await saveBuyers(B); await setPhone(k.app, p.num, u);
       done(`✓ ${p.show} — покупка перенесена на ${k.key}, до ${fmtD(u)}. Старый ключ отключён`);
     }
   }catch(e){ msg('#mAct','m-bad','✗ '+errText(e)); }
@@ -366,7 +376,7 @@ $('#bBlk').onclick = async ()=>{
       if (S.d.b.includes(S.id)) { msg('#mBlk','m-warn','Этот ключ уже заблокирован'); return; }
       const wasAct = !!S.d.a[S.id];
       delete S.d.a[S.id]; S.d.b.push(S.id); await saveShard(S);
-      try{ const B = await buyers(); const n = num || keyOwner(B, k.key); if (n){ B.d[n].blk = Date.now(); await saveBuyers(B); } }catch(e){}
+      try{ const B = await buyers(); const n = num || keyOwner(B, k.key); if (n){ B.d[n].blk = Date.now(); await saveBuyers(B); await setPhone(k.app, n, 0); } }catch(e){}
       await bumpStats(k.app, wasAct?-1:0, 1);
       msg('#mBlk','m-ok',`⛔ ${k.key} заблокирован`); $('#kBlk').value=''; loadStats();
     }catch(e){ msg('#mBlk','m-bad','✗ '+errText(e)); }
