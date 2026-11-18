@@ -60,6 +60,7 @@ body::before{content:"";position:fixed;inset:-2px;z-index:-1;pointer-events:none
 main{padding:var(--below) calc(var(--sar) + 10px) calc(var(--sab) + 16px) calc(var(--sal) + 10px);
   display:grid;gap:10px;grid-template-columns:1fr}
 @media (min-width:700px){ main{grid-template-columns:1fr 1fr;align-items:start} .span2{grid-column:1/-1} }
+.qn{display:inline-block;min-width:22px;padding:1px 8px;border-radius:10px;background:rgba(255,182,72,.2);color:#ffe3b8;font-size:14px;text-align:center}.qi{border-top:1px solid var(--line);padding:10px 0}.qi:first-child{border-top:0}.qh{display:flex;justify-content:space-between;font-weight:600}.qs{font-size:13px;color:var(--mut);margin:2px 0 8px;word-break:break-all}.qb{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .card{
   background:linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.05));
   border:1px solid var(--line);border-radius:18px;padding:13px;
@@ -125,7 +126,12 @@ input::placeholder{color:rgba(167,171,195,.6)}
     </div>
   </div>
 
-  <div class="card">
+  <div class="card span2" id="qCard">
+    <h2>🌙 Ждут проверки <span id="qN" class="qn"></span></h2>
+    <div id="qList"><div class="mut">Загружаю…</div></div>
+  </div>
+
+  <div class="card" id="actCard">
     <h2>Активировать ключ</h2>
     <input type="tel" id="pAct" placeholder="Номер телефона: +7 999 123-45-67" autocomplete="off">
     <input type="text" id="kAct" placeholder="UG-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
@@ -146,7 +152,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '19';
+const APP_VER = '20';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -465,12 +471,46 @@ async function checkUpdate(){
     if (m && m[1]!==APP_VER) location.replace(freshUrl('v'+m[1]));
   }catch(e){}
 }
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ checkUpdate(); loadStats(); } });
+
+/* ---------- ждут проверки: заявки, по которым приложение открыто временно (10 часов) ---------- */
+const QURL = 'https://ntfy.sh/ugq-af43161359a999ea';
+const PRICE = { h:'1 990 ₽', y:'2 990 ₽' };
+let Q = [];
+async function loadQ(){
+  const box = $('#qList');
+  try{
+    const r = await fetch(QURL+'/json?poll=1&since=12h', {cache:'no-store'});
+    const tx = r.ok ? await r.text() : '';
+    const by = {};
+    tx.split('\n').forEach(l=>{ try{ const e=JSON.parse(l), m=JSON.parse(e.message||'{}'); if(m.k && m.ph && (!by[m.k] || by[m.k].t < m.t)) by[m.k]=m; }catch(x){} });
+    const all = Object.values(by).sort((a,b)=>a.t-b.t), out = [];
+    for (const m of all){
+      const k = parseKey(m.k); if (k.err) continue;
+      try{ const S = await shard(k); if (S.d.a[S.id] || S.d.b.includes(S.id)) continue; }catch(e){}
+      out.push(m);
+    }
+    Q = out; $('#qN').textContent = Q.length;
+    if (!Q.length){ box.innerHTML = '<div class="mut">Новых заявок нет</div>'; return; }
+    box.innerHTML = Q.map((m,i)=>{
+      const d = new Date(m.t), hm = d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}), dd = d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'});
+      return `<div class="qi"><div class="qh"><span>+${m.ph}</span><span class="mut">${dd} ${hm}</span></div>
+        <div class="qs">${APPS[m.app]||m.app} · ${m.pl==='y'?'1 год':'6 месяцев'} · ${PRICE[m.pl==='y'?'y':'h']} · ${m.k}</div>
+        <div class="qb"><button class="btn gold sm" data-qa="${i}">✓ Активировать</button><button class="btn red sm" data-qb="${i}">⛔ Заблокировать</button></div></div>`;
+    }).join('');
+  }catch(e){ box.innerHTML = '<div class="mut">Нет связи — потяни вниз, чтобы обновить</div>'; }
+}
+$('#qList').onclick = e=>{
+  const a = e.target.closest('[data-qa]'), b = e.target.closest('[data-qb]');
+  if (a){ const m = Q[+a.dataset.qa]; setTerm(m.pl==='y'?'y':'h'); $('#pAct').value='+'+m.ph; $('#kAct').value=m.k; $('#actCard').scrollIntoView({behavior:'smooth',block:'center'}); $('#bAct').click(); setTimeout(loadQ, 5000); }
+  if (b){ const m = Q[+b.dataset.qb]; $('#kBlk').value=m.k; $('#bBlk').click(); setTimeout(loadQ, 8000); }
+};
+setInterval(()=>{ if(document.visibilityState==='visible') loadQ(); }, 30000);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ checkUpdate(); loadStats(); loadQ(); } });
 addEventListener('focus', checkUpdate);
 setInterval(()=>{ if(document.visibilityState==='visible') checkUpdate(); }, 60000);
 
 /* ---------- boot ---------- */
-ghOk(false); loadStats(); checkUpdate();
+ghOk(false); loadStats(); checkUpdate(); loadQ();
 </script>
 </body>
 </html>
