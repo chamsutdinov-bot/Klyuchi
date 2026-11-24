@@ -163,13 +163,15 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '24';
+const APP_VER = '25';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-const APPS = { UG: 'Universal Gym · Men', UW: 'Universal Gym · Woman', KM: 'Конструктор' };
+const APPS = { UG: 'Universal Gym · Men', UW: 'Universal Gym · Woman', UP: 'Universal Gym · Питание', KM: 'Конструктор' };
 const YEAR = 183*24*60*60*1000; /* срок подписки: полгода */
-const TERMS = { m:{ ms:30*24*60*60*1000, t:'месяц' }, h:{ ms:YEAR, t:'полгода' }, y:{ ms:365*24*60*60*1000, t:'год' } };
+const TERMS = { m:{ ms:30*24*60*60*1000, t:'месяц' }, h:{ ms:YEAR, t:'полгода' }, y:{ ms:365*24*60*60*1000, t:'год' }, f:{ ms:100*365*24*60*60*1000, t:'навсегда' } };
+/* «Питание» (UP) покупается навсегда — срок выбирается сам, кнопки сроков к нему не относятся */
+const termFor = app => app==='UP' ? 'f' : (term==='f' ? 'h' : term);
 let term = 'h'; /* выбранный срок при активации */
 /* покупатели хранятся по номеру; у Universal Gym — просто номер, у других приложений — «KM:номер» */
 const bk = (num, app) => app==='UG' ? num : app+':'+num;
@@ -308,7 +310,7 @@ function ask(title, text, okText, okCls, fn){
 async function doActivate(p, k, mode){
   const btn=$('#bAct'); btn.disabled=true; msg('#mAct','m-info','Записываю…');
   try{
-    const B = await buyers(), now = Date.now(), key = bk(p.num, k.app), T = TERMS[term];
+    const B = await buyers(), now = Date.now(), key = bk(p.num, k.app), T = TERMS[termFor(k.app)];
     const rec = B.d[key];
     const S = await shard(k);
     if (S.d.b.includes(S.id)) { msg('#mAct','m-bad','⛔ Этот ключ заблокирован'); return; }
@@ -320,7 +322,7 @@ async function doActivate(p, k, mode){
       S.d.a[S.id] = u; S.d.m = S.d.m.filter(x=>x!==S.id); await saveShard(S);
       B.d[key] = { k:k.key, u, t:now }; await saveBuyers(B); await setPhone(k.app, p.num, u);
       await bumpStats(k.app, 1, 0);
-      done(`✓ ${p.show} — ${k.key} активирован до ${fmtD(u)}`);
+      done(`✓ ${p.show} — ${k.key} активирован ${k.app==='UP'?'навсегда':'до '+fmtD(u)}`);
     }
     else if (rec.k===k.key){                           /* тот же телефон */
       if (rec.u > now && mode!=='extend'){
@@ -493,8 +495,8 @@ async function checkUpdate(){
 
 /* ---------- ждут проверки: заявки, по которым приложение открыто временно (10 часов) ---------- */
 const QURL = 'https://ntfy.sh/ugq-af43161359a999ea';
-const PRICE = { m:'390 ₽', h:'1 990 ₽', y:'2 990 ₽' };
-const PLT = { m:'1 месяц', h:'6 месяцев', y:'1 год' };
+const PRICE = { m:'390 ₽', h:'1 990 ₽', y:'2 990 ₽', f:'1 990 ₽' };
+const PLT = { m:'1 месяц', h:'6 месяцев', y:'1 год', f:'навсегда' };
 let Q = [];
 const QSKIP = ['UG-K7CR-LX3H-9PJX','UG-4CJ2-3LRE-5GNV']; // тестовые заявки — не показывать
 async function loadQ(){
@@ -523,7 +525,7 @@ async function loadQ(){
 }
 $('#qList').onclick = e=>{
   const a = e.target.closest('[data-qa]'), b = e.target.closest('[data-qb]');
-  if (a){ const m = Q[+a.dataset.qa]; setTerm(PRICE[m.pl]?m.pl:'h'); $('#pAct').value='+'+m.ph; $('#kAct').value=m.k; openAct(); $('#bAct').click(); setTimeout(loadQ, 5000); }
+  if (a){ const m = Q[+a.dataset.qa]; setTerm(PRICE[m.pl]&&m.pl!=='f'?m.pl:'h'); $('#pAct').value='+'+m.ph; $('#kAct').value=m.k; openAct(); $('#bAct').click(); setTimeout(loadQ, 5000); }
   if (b){ const m = Q[+b.dataset.qb]; $('#kBlk').value=m.k; $('#bBlk').click(); setTimeout(loadQ, 8000); }
 };
 setInterval(()=>{ if(document.visibilityState==='visible') loadQ(); }, 30000);
