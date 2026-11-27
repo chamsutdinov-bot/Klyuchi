@@ -163,7 +163,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '25';
+const APP_VER = '26';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -498,6 +498,7 @@ const QURL = 'https://ntfy.sh/ugq-af43161359a999ea';
 const PRICE = { m:'390 ₽', h:'1 990 ₽', y:'2 990 ₽', f:'1 990 ₽' };
 const PLT = { m:'1 месяц', h:'6 месяцев', y:'1 год', f:'навсегда' };
 let Q = [];
+const QFROM = 1795819966084; // 28.11.2026: тестовые заявки владельца до этого времени не показывать
 const QSKIP = ['UG-K7CR-LX3H-9PJX','UG-4CJ2-3LRE-5GNV']; // тестовые заявки — не показывать
 async function loadQ(){
   const box = $('#qList');
@@ -508,7 +509,7 @@ async function loadQ(){
     tx.split('\n').forEach(l=>{ try{ const e=JSON.parse(l), m=JSON.parse(e.message||'{}'); if(m.k && m.ph && (!by[m.k] || by[m.k].t < m.t)) by[m.k]=m; }catch(x){} });
     const all = Object.values(by).sort((a,b)=>a.t-b.t), out = [];
     for (const m of all){
-      if (QSKIP.includes(m.k)) continue;
+      if (QSKIP.includes(m.k) || m.t < QFROM) continue;
       const k = parseKey(m.k); if (k.err) continue;
       try{ const S = await shard(k); if (S.d.a[S.id] || S.d.b.includes(S.id)) continue; }catch(e){}
       out.push(m);
