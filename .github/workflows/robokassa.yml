@@ -1,0 +1,28 @@
+name: robokassa
+# Автоактивация: раз в 5 минут проверяет оплаты Robokassa по заявкам из ntfy и активирует ключи
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: robokassa
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: check payments
+        env:
+          ROBO_PASS2: ${{ secrets.ROBO_PASS2 }}
+          KD_TOKEN: ${{ secrets.KD_TOKEN }}
+        run: python3 .github/scripts/robo.py
+      - name: commit
+        run: |
+          git config user.name robot
+          git config user.email robot@users.noreply.github.com
+          git add list .github/robo-state.json
+          git diff --cached --quiet || (git commit -qm "Автоактивация" && (git push -q || (git pull -q --rebase && git push -q)))
