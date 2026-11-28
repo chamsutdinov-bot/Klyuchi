@@ -135,7 +135,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
     </div>
   </div>
 
-  <div class="card span2" id="qCard">
+  <div class="card span2" id="qCard" style="display:none"><!-- 28.11.2026: скрыто по просьбе владельца — активирует робот Robokassa -->
     <h2>🌙 Ждут проверки <span id="qN" class="qn"></span></h2>
     <div id="qList"><div class="mut">Загружаю…</div></div>
   </div>
@@ -163,7 +163,7 @@ input::placeholder{color:rgba(167,171,195,.6)}
 <div id="toast"></div>
 
 <script>
-const APP_VER = '26';
+const APP_VER = '27';
 const OWNER = 'chamsutdinov-bot', REPO = 'klyuchi';
 const LS = 'klyuchi.v3';
 const ALPH = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
